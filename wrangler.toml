@@ -1,0 +1,14 @@
+name = "isla-worker"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[observability]
+enabled = true
+
+# Secrets (set in the Cloudflare dashboard, never committed):
+#   ISLA_TOOL_KEY              - shared key ElevenLabs sends in the x-isla-key header
+#   WSDOT_API_KEY              - WSDOT Traveler API access code
+#   TWILIO_ACCOUNT_SID
+#   TWILIO_AUTH_TOKEN
+#   SLACK_WEBHOOK_URL          - incoming webhook for the BI Info Slack channel
+#   ELEVENLABS_WEBHOOK_SECRET  - from the ElevenLabs post-call webhook settings
