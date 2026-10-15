@@ -83,14 +83,23 @@ export async function handleSms(request, env, ctx) {
   const { body, image } = composeSms(input);
   if (!body) return json({ status: "failed", error: "nothing to send" }, 400);
 
+  // Twilio credentials: Cloudflare secrets if set, otherwise sent by ElevenLabs from its
+  // workspace secret (x-twilio-token) with the account SID (x-twilio-sid). /sms is behind x-isla-key.
+  const sid = env.TWILIO_ACCOUNT_SID || request.headers.get("x-twilio-sid") || "";
+  const token = env.TWILIO_AUTH_TOKEN || request.headers.get("x-twilio-token") || "";
+  if (!/^AC[0-9a-f]{32}$/.test(sid) || !token) {
+    console.error("twilio credentials missing");
+    return json({ status: "failed", error: "the text could not be sent - tell the caller and offer to read the details instead" }, 500);
+  }
+
   const form = new URLSearchParams({ To: to, From: FROM_NUMBER, Body: body });
   if (image) form.append("MediaUrl", image);
   const res = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`,
+    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
     {
       method: "POST",
       headers: {
-        authorization: "Basic " + btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
+        authorization: "Basic " + btoa(`${sid}:${token}`),
         "content-type": "application/x-www-form-urlencoded",
       },
       body: form,
