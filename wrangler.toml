@@ -4,6 +4,11 @@ compatibility_date = "2026-09-01"
 workers_dev = true
 preview_urls = false
 
+[[d1_databases]]
+binding = "DB"
+database_name = "isla-calls"
+database_id = "de488308-acab-4d9e-88f2-49af81148268"
+
 [observability]
 enabled = true
 

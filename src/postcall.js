@@ -1,6 +1,6 @@
-// Post-call report route. Port of Make scenario 4823209 "BI — Post-Call Report".
+// Post-call route. Replaces Make scenario 4823209 "BI — Post-Call Report".
 // ElevenLabs post-call webhook calls: POST /postcall (signed with ElevenLabs-Signature).
-// Posts the call summary to Slack. (The Google Sheet row is not ported yet - see README.)
+// Saves the call to the D1 call log (env.DB) and, if SLACK_WEBHOOK_URL is set, posts a Slack report.
 
 import { postSlack } from "./sms.js";
 
@@ -48,7 +48,7 @@ export function buildReport(evt) {
   const d = evt.data || {};
   const md = d.metadata || {};
   const dc = d.analysis?.data_collection_results || {};
-  const start = md.start_time_unix_secs ? pacific.format(new Date(md.start_time_unix_secs * 1000)).replace(/ /g, " ") : "unknown";
+  const start = md.start_time_unix_secs ? pacific.format(new Date(md.start_time_unix_secs * 1000)).replace(/ /g, " ") : "unknown";
   const mins = md.call_duration_secs != null ? Math.round((md.call_duration_secs / 60) * 10) / 10 : "?";
   return (
     `📞 *Isla (BI Info) call report*\n\n` +
@@ -58,6 +58,63 @@ export function buildReport(evt) {
     `*Summary:*\n${d.analysis?.transcript_summary ?? ""}\n\n` +
     `Conversation ID: ${d.conversation_id ?? ""}`
   );
+}
+
+// "not provided" / "none" / "" -> null
+export function clean(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return !s || /^(not provided|none|n\/a|unknown|null)$/i.test(s) ? null : s;
+}
+
+// Turn the webhook payload into one call-log row.
+export function callRow(evt) {
+  const d = evt.data || {};
+  const md = d.metadata || {};
+  const dc = d.analysis?.data_collection_results || {};
+  const places = [];
+  let textOk = null;
+  for (const turn of d.transcript || []) {
+    for (const tc of turn.tool_calls || []) {
+      if (tc.tool_name !== "BI_Info_Send_Text") continue;
+      try {
+        const p = JSON.parse(tc.params_as_json || "{}");
+        if (p.locations) places.push(String(p.locations));
+      } catch {}
+    }
+    for (const tr of turn.tool_results || []) {
+      if (tr.tool_name !== "BI_Info_Send_Text") continue;
+      const sent = !tr.is_error && /"status"\s*:\s*"sent"/.test(String(tr.result_value || ""));
+      textOk = textOk === 1 || sent ? 1 : 0;
+    }
+  }
+  return {
+    conversation_id: d.conversation_id,
+    start_unix: md.start_time_unix_secs || Math.floor(Date.now() / 1000),
+    duration_secs: md.call_duration_secs ?? null,
+    phone: md.phone_call?.external_number || null,
+    source: md.phone_call?.type || d.conversation_initiation_source || null,
+    name: clean(dc.name?.value),
+    email: clean(dc.email?.value),
+    locations: clean(dc.locations_of_interest?.value),
+    title: d.analysis?.call_summary_title || null,
+    summary: d.analysis?.transcript_summary || null,
+    text_places: places.length ? places.join(", ") : null,
+    text_ok: textOk,
+  };
+}
+
+export const CALL_COLS = [
+  "conversation_id", "start_unix", "duration_secs", "phone", "source", "name", "email",
+  "locations", "title", "summary", "text_places", "text_ok",
+];
+
+export function upsertCall(db, row) {
+  const ph = CALL_COLS.map(() => "?").join(",");
+  const upd = CALL_COLS.slice(1).map((c) => `${c}=excluded.${c}`).join(",");
+  return db
+    .prepare(`INSERT INTO calls (${CALL_COLS.join(",")}) VALUES (${ph}) ON CONFLICT(conversation_id) DO UPDATE SET ${upd}`)
+    .bind(...CALL_COLS.map((c) => row[c] ?? null));
 }
 
 export async function handlePostCall(request, env, ctx) {
@@ -71,6 +128,14 @@ export async function handlePostCall(request, env, ctx) {
     return new Response("bad json", { status: 400 });
   }
   if (evt.type !== "post_call_transcription") return new Response("ignored", { status: 200 });
+  const row = callRow(evt);
+  if (env.DB && row.conversation_id) {
+    try {
+      await upsertCall(env.DB, row).run();
+    } catch (err) {
+      console.error("call log write failed", err);
+    }
+  }
   ctx?.waitUntil?.(postSlack(env, buildReport(evt)));
   return new Response("ok", { status: 200 });
 }

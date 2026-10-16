@@ -8,6 +8,7 @@
 import { handleFerry } from "./ferry.js";
 import { handleSms } from "./sms.js";
 import { handlePostCall } from "./postcall.js";
+import { handleCalls } from "./calls.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -15,6 +16,7 @@ export default {
     try {
       if (pathname === "/health") return new Response("ok");
       if (pathname === "/postcall" && request.method === "POST") return handlePostCall(request, env, ctx);
+      if (pathname === "/calls" || pathname.startsWith("/calls/")) return handleCalls(request, env, ctx);
 
       if (pathname === "/ferry" || pathname === "/sms") {
         if (!env.ISLA_TOOL_KEY || request.headers.get("x-isla-key") !== env.ISLA_TOOL_KEY) {

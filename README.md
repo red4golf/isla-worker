@@ -30,9 +30,13 @@ Output text and SMS wording match the Make versions exactly (see `test/worker.te
 3. Post-call webhook → `/postcall`. Check the Slack report.
 4. Leave the Make scenarios off but in place for a week as a fallback, then delete.
 
-## Not ported yet
+## Call log (`/calls`)
 
-- The Google Sheet row (OTBP-BI-Info) from the post-call report. Needs a Google service account; decide whether Slack alone is enough.
+Every call is saved to the D1 database `isla-calls` (binding `DB`): `/postcall` writes the call (caller number, name, email, places, summary, text result) and `/sms` logs each text sent. Tables are in `schema.sql`.
+
+`https://isla-worker.soccer-carpool-worker.workers.dev/calls` is a private page: recent calls, repeat callers, top places, search, and CSV export. Sign-in texts a one-time link to the owner phone stored in D1 (`settings.owner_phone`); sessions last 30 days. No passwords.
+
+This replaces the Google Sheet row the Make scenario used to write.
 
 ## Updating places
 
