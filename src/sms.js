@@ -33,7 +33,7 @@ export function placeBlock(rawName, walking) {
   if (p?.t) out += `\n${p.t}`;
   out +=
     `\nDirections: https://www.google.com/maps/dir/?api=1&destination=` +
-    encodeURIComponent(`${name} Bainbridge Island`) +
+    encodeURIComponent(`${p?.n || name} Bainbridge Island`) +
     (walking ? "&travelmode=walking" : "");
   return out;
 }

@@ -10,8 +10,8 @@ const sample = JSON.parse(readFileSync(new URL("./sample_7_3.json", import.meta.
 
 test("places table copied intact", () => {
   assert.equal(PLACES.v, "2026-10-16");
-  assert.equal(PLACES.places.length, 74);
-  assert.equal(PLACES.aliases.length, 111);
+  assert.equal(PLACES.places.length, 91);
+  assert.equal(PLACES.aliases.length, 145);
   const keys = new Set(PLACES.places.map((p) => p.k));
   for (const a of PLACES.aliases) assert.ok(keys.has(a.k), `alias ${a.a} -> missing ${a.k}`);
 });
