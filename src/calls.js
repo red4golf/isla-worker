@@ -130,12 +130,23 @@ export function canonicalPlaces(text) {
   return out;
 }
 
+// Pair each unmet request with its topic label (both " | "-separated, same order).
+export function splitGaps(requests, topics) {
+  if (!requests) return [];
+  const reqs = String(requests).split("|").map((x) => x.trim()).filter(Boolean);
+  const tops = String(topics || "").split("|").map((x) => x.trim());
+  return reqs.map((detail, i) => {
+    const t = (tops[i] || "").toLowerCase().replace(/\s+/g, " ").trim();
+    return { topic: t && t !== "none" ? t : detail.toLowerCase().slice(0, 60), detail };
+  });
+}
+
 async function dataJson(env) {
   const owner = await ownerPhone(env);
   const { results } = await env.DB.prepare(
-    "SELECT conversation_id, start_unix, duration_secs, phone, source, name, email, locations, title, summary, text_places, text_ok FROM calls ORDER BY start_unix DESC LIMIT 5000"
+    "SELECT conversation_id, start_unix, duration_secs, phone, source, name, email, locations, title, summary, text_places, text_ok, unmet_requests, unmet_topics FROM calls ORDER BY start_unix DESC LIMIT 5000"
   ).all();
-  const calls = results.map((r) => ({ ...r, places: canonicalPlaces(r.locations), is_owner: !!owner && r.phone === owner }));
+  const calls = results.map((r) => ({ ...r, places: canonicalPlaces(r.locations), gaps: splitGaps(r.unmet_requests, r.unmet_topics), is_owner: !!owner && r.phone === owner }));
   return new Response(JSON.stringify({ calls }), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
 
@@ -147,7 +158,7 @@ function csvCell(v) {
 
 async function exportCsv(env) {
   const { results } = await env.DB.prepare("SELECT * FROM calls ORDER BY start_unix DESC").all();
-  const cols = ["start_pacific", "duration_secs", "phone", "name", "email", "locations", "text_places", "text_ok", "title", "summary", "conversation_id"];
+  const cols = ["start_pacific", "duration_secs", "phone", "name", "email", "locations", "text_places", "text_ok", "unmet_requests", "unmet_topics", "title", "summary", "conversation_id"];
   const fmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", dateStyle: "short", timeStyle: "short" });
   const lines = [cols.join(",")];
   for (const r of results) {
@@ -197,7 +208,7 @@ table{width:100%;border-collapse:collapse;background:var(--card);border:1px soli
 </style></head><body><div class="wrap">
 <header><h1>Isla call log</h1><div><a class="btn" href="/calls/export.csv">Export CSV</a> <form method="post" action="/calls/logout" style="display:inline"><button>Sign out</button></form></div></header>
 <div class="stats" id="stats"></div>
-<div class="bar"><div class="tabs"><button data-v="calls" class="on">Calls</button><button data-v="callers">Callers</button><button data-v="places">Places</button></div>
+<div class="bar"><div class="tabs"><button data-v="calls" class="on">Calls</button><button data-v="callers">Callers</button><button data-v="places">Places</button><button data-v="gaps">Gaps</button></div>
 <input type="search" id="q" placeholder="Search name, number, place, summary"><label class="chk"><input type="checkbox" id="hideMine" checked> Hide my own calls</label></div>
 <div id="out"><div class="empty">Loading…</div></div></div>
 <script>
@@ -207,7 +218,7 @@ const fmtDay=new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",mon
 function phoneFmt(p){const m=/^\\+1(\\d{3})(\\d{3})(\\d{4})$/.exec(p||"");return m?"("+m[1]+") "+m[2]+"-"+m[3]:(p||"")}
 function dur(s){if(s==null)return"";const m=Math.floor(s/60),r=s%60;return m?m+"m "+String(r).padStart(2,"0")+"s":r+"s"}
 function el(tag,attrs,...kids){const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs||{})){if(k==="class")e.className=v;else e.setAttribute(k,v)}for(const k of kids){if(k==null||k===false)continue;e.append(k instanceof Node?k:document.createTextNode(String(k)))}return e}
-function rows(){const q=$("#q").value.trim().toLowerCase();const hide=$("#hideMine").checked;return ALL.filter(c=>!(hide&&c.is_owner)).filter(c=>!q||[c.name,c.phone,phoneFmt(c.phone),c.email,c.locations,c.summary,c.title,c.text_places].join(" ").toLowerCase().includes(q))}
+function rows(){const q=$("#q").value.trim().toLowerCase();const hide=$("#hideMine").checked;return ALL.filter(c=>!(hide&&c.is_owner)).filter(c=>!q||[c.name,c.phone,phoneFmt(c.phone),c.email,c.locations,c.summary,c.title,c.text_places,c.unmet_requests].join(" ").toLowerCase().includes(q))}
 function counts(list){const m={};for(const c of list)if(c.phone)m[c.phone]=(m[c.phone]||0)+1;return m}
 function stats(list){const t=Date.now()/1000,wk=list.filter(c=>c.start_unix>t-7*86400).length,mo=list.filter(c=>c.start_unix>t-30*86400).length,uniq=new Set(list.map(c=>c.phone).filter(Boolean)).size,tx=list.filter(c=>c.text_ok===1).length;
 $("#stats").replaceChildren(...[[wk,"calls · 7 days"],[mo,"calls · 30 days"],[uniq,"unique callers"],[tx,"texts delivered"]].map(([n,l])=>el("div",{class:"stat"},el("b",{},n),el("span",{},l))))}
@@ -215,7 +226,7 @@ function renderCalls(list){const cnt=counts(ALL);if(!list.length)return[el("div"
 return list.map(c=>{const who=el("div",{class:"who"},c.phone?el("a",{href:"tel:"+c.phone},c.name?c.name+" · "+phoneFmt(c.phone):phoneFmt(c.phone)):(c.name||"Web caller"),cnt[c.phone]>1?el("span",{class:"badge"},cnt[c.phone]+" calls"):null);
 const txt=c.text_ok===1?el("div",{class:"txt ok"},"✓ Texted: "+(c.text_places||"details")):c.text_ok===0?el("div",{class:"txt bad"},"✗ Text failed"+(c.text_places?": "+c.text_places:"")):null;
 return el("div",{class:"card"},el("div",{class:"row"},el("div",{},el("div",{class:"when"},fmtWhen.format(new Date(c.start_unix*1000))),el("div",{class:"muted"},[dur(c.duration_secs),c.title].filter(Boolean).join(" · "))),who),
-c.places.length?el("div",{class:"chips"},...c.places.map(p=>el("span",{class:"chip"},p))):null,txt,
+c.places.length?el("div",{class:"chips"},...c.places.map(p=>el("span",{class:"chip"},p))):null,txt,c.gaps.length?el("div",{class:"txt bad"},"Couldn\u2019t help with: "+c.gaps.map(g=>g.detail).join("; ")):null,
 c.summary?el("details",{},el("summary",{},"Summary"),el("p",{},c.summary),el("a",{class:"muted",href:"https://elevenlabs.io/app/agents/history/"+encodeURIComponent(c.conversation_id),target:"_blank",rel:"noopener"},"Open in ElevenLabs ↗")):null)})}
 function renderCallers(list){const m=new Map();for(const c of list){if(!c.phone)continue;const g=m.get(c.phone)||{phone:c.phone,name:null,n:0,last:0,places:new Set()};g.n++;g.name=g.name||c.name;g.last=Math.max(g.last,c.start_unix);c.places.forEach(p=>g.places.add(p));m.set(c.phone,g)}
 const gs=[...m.values()].sort((a,b)=>b.n-a.n||b.last-a.last);if(!gs.length)return[el("div",{class:"empty"},"No callers match.")];
@@ -223,7 +234,10 @@ return[el("table",{},el("tr",{},el("th",{},"Caller"),el("th",{},"Calls"),el("th"
 function renderPlaces(list){const t=Date.now()/1000,m=new Map();for(const c of list)for(const p of c.places){const g=m.get(p)||{p,all:0,wk:0,mo:0};g.all++;if(c.start_unix>t-7*86400)g.wk++;if(c.start_unix>t-30*86400)g.mo++;m.set(p,g)}
 const gs=[...m.values()].sort((a,b)=>b.mo-a.mo||b.all-a.all);if(!gs.length)return[el("div",{class:"empty"},"No places yet.")];
 return[el("table",{},el("tr",{},el("th",{},"Place"),el("th",{},"7 days"),el("th",{},"30 days"),el("th",{},"All time")),...gs.map(g=>el("tr",{},el("td",{},g.p),el("td",{class:"n"},g.wk),el("td",{class:"n"},g.mo),el("td",{class:"n"},g.all))))]}
-function render(){const list=rows();stats(list);$("#out").replaceChildren(...(view==="calls"?renderCalls(list):view==="callers"?renderCallers(list):renderPlaces(list)))}
+function renderGaps(list){const t=Date.now()/1000,m=new Map();for(const c of list)for(const g of c.gaps){const e=m.get(g.topic)||{topic:g.topic,n:0,last:0,details:[]};e.n++;e.last=Math.max(e.last,c.start_unix);if(e.details.length<5)e.details.push({d:g.detail,when:c.start_unix});m.set(g.topic,e)}
+const gs=[...m.values()].sort((a,b)=>b.n-a.n||b.last-a.last);if(!gs.length)return[el("div",{class:"empty"},"No unmet requests recorded yet.")];
+return gs.map(e=>el("div",{class:"card"},el("div",{class:"row"},el("div",{class:"when"},e.topic),el("div",{class:"muted"},e.n+(e.n>1?" callers":" caller")+" \u00b7 last "+fmtDay.format(new Date(e.last*1000)))),el("details",{},el("summary",{},"What callers asked"),...e.details.map(x=>el("p",{},fmtWhen.format(new Date(x.when*1000))+": "+x.d)))))}
+function render(){const list=rows();stats(list);$("#out").replaceChildren(...(view==="calls"?renderCalls(list):view==="callers"?renderCallers(list):view==="gaps"?renderGaps(list):renderPlaces(list)))}
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{view=b.dataset.v;document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));render()});
 $("#q").oninput=render;$("#hideMine").onchange=render;
 fetch("/calls/data").then(r=>{if(r.status===401){location.reload();throw 0}return r.json()}).then(d=>{ALL=d.calls;render()}).catch(e=>{if(e)$("#out").replaceChildren(el("div",{class:"empty"},"Couldn't load calls."))});

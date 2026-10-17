@@ -11,8 +11,12 @@ CREATE TABLE IF NOT EXISTS calls (
   title TEXT,
   summary TEXT,
   text_places TEXT,
-  text_ok INTEGER          -- 1 sent, 0 failed, NULL no text / unknown
+  text_ok INTEGER,         -- 1 sent, 0 failed, NULL no text / unknown
+  unmet_requests TEXT,     -- " | "-separated requests Isla couldn't satisfy (post-call analysis)
+  unmet_topics TEXT        -- matching short labels, same order, for grouping
 );
+-- Added 2026-10-17 on an existing database:
+-- ALTER TABLE calls ADD COLUMN unmet_requests TEXT; ALTER TABLE calls ADD COLUMN unmet_topics TEXT;
 CREATE INDEX IF NOT EXISTS calls_start ON calls(start_unix);
 CREATE INDEX IF NOT EXISTS calls_phone ON calls(phone);
 

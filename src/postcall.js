@@ -54,7 +54,9 @@ export function buildReport(evt) {
     `📞 *Isla (BI Info) call report*\n\n` +
     `• *Caller:* ${dc.name?.value ?? ""} / ${md.phone_call?.external_number || "unknown"}\n` +
     `• *Time:* ${start} Pacific (${mins} min)\n` +
-    `• *Locations of interest:* ${dc.locations_of_interest?.value ?? ""}\n\n` +
+    `• *Locations of interest:* ${dc.locations_of_interest?.value ?? ""}\n` +
+    (clean(dc.unmet_requests?.value) ? `• *Couldn't help with:* ${dc.unmet_requests.value}\n` : "") +
+    `\n` +
     `*Summary:*\n${d.analysis?.transcript_summary ?? ""}\n\n` +
     `Conversation ID: ${d.conversation_id ?? ""}`
   );
@@ -101,12 +103,14 @@ export function callRow(evt) {
     summary: d.analysis?.transcript_summary || null,
     text_places: places.length ? places.join(", ") : null,
     text_ok: textOk,
+    unmet_requests: clean(dc.unmet_requests?.value),
+    unmet_topics: clean(dc.unmet_request_topics?.value),
   };
 }
 
 export const CALL_COLS = [
   "conversation_id", "start_unix", "duration_secs", "phone", "source", "name", "email",
-  "locations", "title", "summary", "text_places", "text_ok",
+  "locations", "title", "summary", "text_places", "text_ok", "unmet_requests", "unmet_topics",
 ];
 
 export function upsertCall(db, row) {

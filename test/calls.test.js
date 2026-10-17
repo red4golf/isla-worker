@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import worker from "../src/index.js";
 import { callRow, clean } from "../src/postcall.js";
-import { canonicalPlaces } from "../src/calls.js";
+import { canonicalPlaces, splitGaps } from "../src/calls.js";
 
 // Minimal D1 stand-in over node:sqlite.
 function fakeD1() {
@@ -43,12 +43,20 @@ test("canonicalPlaces maps aliases and skips generic entries", () => {
   ]);
 });
 
+test("splitGaps pairs requests with topic labels", () => {
+  assert.deepEqual(splitGaps("snack near ferry at 6am - nothing open | laundromat", "Coffee near ferry - early morning | laundromat"), [
+    { topic: "coffee near ferry - early morning", detail: "snack near ferry at 6am - nothing open" },
+    { topic: "laundromat", detail: "laundromat" },
+  ]);
+  assert.deepEqual(splitGaps(null, null), []);
+});
+
 test("callRow pulls caller, places and text result from the webhook", () => {
   const row = callRow({
     data: {
       conversation_id: "conv_x",
       metadata: { start_time_unix_secs: 100, call_duration_secs: 90, phone_call: { external_number: "+12065550100", type: "twilio" } },
-      analysis: { transcript_summary: "s", call_summary_title: "t", data_collection_results: { name: { value: "not provided" }, locations_of_interest: { value: "Frog Rock" } } },
+      analysis: { transcript_summary: "s", call_summary_title: "t", data_collection_results: { name: { value: "not provided" }, locations_of_interest: { value: "Frog Rock" }, unmet_requests: { value: "late coffee" }, unmet_request_topics: { value: "late-night coffee" } } },
       transcript: [
         { tool_calls: [{ tool_name: "BI_Info_Send_Text", params_as_json: '{"locations":"Frog Rock"}' }] },
         { tool_results: [{ tool_name: "BI_Info_Send_Text", is_error: false, result_value: '{"status":"sent","type":"mms"}' }] },
@@ -59,6 +67,8 @@ test("callRow pulls caller, places and text result from the webhook", () => {
   assert.equal(row.name, null);
   assert.equal(row.text_places, "Frog Rock");
   assert.equal(row.text_ok, 1);
+  assert.equal(row.unmet_requests, "late coffee");
+  assert.equal(row.unmet_topics, "late-night coffee");
 });
 
 test("call log: locked until sign-in, link texted to owner, one-time use", async () => {
@@ -99,12 +109,13 @@ test("call log: locked until sign-in, link texted to owner, one-time use", async
     r = await worker.fetch(new Request(base + "/calls/auth", { method: "POST", body: again }), env, ctx);
     assert.equal(r.status, 400);
 
-    env.DB.raw.prepare("INSERT INTO calls (conversation_id, start_unix, phone, locations, text_ok) VALUES ('c1', 1, '+12065550100', 'the troll', 1), ('c2', 2, ?, 'Frog Rock', NULL)").run(OWNER);
+    env.DB.raw.prepare("INSERT INTO calls (conversation_id, start_unix, phone, locations, text_ok, unmet_requests, unmet_topics) VALUES ('c1', 1, '+12065550100', 'the troll', 1, 'coffee at 6am near ferry', 'coffee near ferry - early morning'), ('c2', 2, ?, 'Frog Rock', NULL, NULL, NULL)").run(OWNER);
     r = await worker.fetch(new Request(base + "/calls/data", { headers: { cookie } }), env, ctx);
     const d = await r.json();
     assert.equal(d.calls.length, 2);
     assert.deepEqual(d.calls[1].places, ["Pia the Peacekeeper"]);
     assert.equal(d.calls[0].is_owner, true);
+    assert.equal(d.calls[1].gaps[0].topic, "coffee near ferry - early morning");
 
     r = await worker.fetch(new Request(base + "/calls/export.csv", { headers: { cookie } }), env, ctx);
     assert.match(await r.text(), /^start_pacific,duration_secs,phone/);
