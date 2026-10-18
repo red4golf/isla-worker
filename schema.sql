@@ -53,3 +53,14 @@ CREATE TABLE IF NOT EXISTS caller_tags (
   expires_unix INTEGER NOT NULL,
   PRIMARY KEY (phone_key, kind)
 );
+
+-- Isla's outbound hours-verification calls (one row per call; see /postcall).
+CREATE TABLE IF NOT EXISTS verify_calls (
+  conversation_id TEXT PRIMARY KEY,
+  start_unix INTEGER NOT NULL,
+  duration_secs INTEGER,
+  phone TEXT,
+  business TEXT,
+  result TEXT,             -- e.g. voicemail, human, no-answer (ElevenLabs call_result / termination reason)
+  summary TEXT
+);

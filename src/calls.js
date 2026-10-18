@@ -147,7 +147,11 @@ async function dataJson(env) {
     "SELECT conversation_id, start_unix, duration_secs, phone, source, name, email, locations, title, summary, text_places, text_ok, unmet_requests, unmet_topics, caller_type, listing_update FROM calls ORDER BY start_unix DESC LIMIT 5000"
   ).all();
   const calls = results.map((r) => ({ ...r, places: canonicalPlaces(r.locations), gaps: splitGaps(r.unmet_requests, r.unmet_topics), is_owner: !!owner && r.phone === owner }));
-  return new Response(JSON.stringify({ calls }), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  let verifications = [];
+  try {
+    verifications = (await env.DB.prepare("SELECT * FROM verify_calls ORDER BY start_unix DESC LIMIT 1000").all()).results;
+  } catch {}
+  return new Response(JSON.stringify({ calls, verifications }), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
 
 function csvCell(v) {
@@ -208,11 +212,11 @@ table{width:100%;border-collapse:collapse;background:var(--card);border:1px soli
 </style></head><body><div class="wrap">
 <header><h1>Isla call log</h1><div><a class="btn" href="/calls/export.csv">Export CSV</a> <form method="post" action="/calls/logout" style="display:inline"><button>Sign out</button></form></div></header>
 <div class="stats" id="stats"></div>
-<div class="bar"><div class="tabs"><button data-v="calls" class="on">Calls</button><button data-v="callers">Callers</button><button data-v="places">Places</button><button data-v="gaps">Gaps</button></div>
+<div class="bar"><div class="tabs"><button data-v="calls" class="on">Calls</button><button data-v="callers">Callers</button><button data-v="places">Places</button><button data-v="gaps">Gaps</button><button data-v="verify">Verifications</button></div>
 <input type="search" id="q" placeholder="Search name, number, place, summary"><label class="chk"><input type="checkbox" id="hideMine" checked> Hide my own calls</label></div>
 <div id="out"><div class="empty">Loading…</div></div></div>
 <script>
-const $=s=>document.querySelector(s);let ALL=[],view="calls";
+const $=s=>document.querySelector(s);let ALL=[],VER=[],view="calls";
 const fmtWhen=new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
 const fmtDay=new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",month:"short",day:"numeric",year:"numeric"});
 function phoneFmt(p){const m=/^\\+1(\\d{3})(\\d{3})(\\d{4})$/.exec(p||"");return m?"("+m[1]+") "+m[2]+"-"+m[3]:(p||"")}
@@ -237,8 +241,11 @@ return[el("table",{},el("tr",{},el("th",{},"Place"),el("th",{},"7 days"),el("th"
 function renderGaps(list){const t=Date.now()/1000,m=new Map();for(const c of list)for(const g of c.gaps){const e=m.get(g.topic)||{topic:g.topic,n:0,last:0,details:[]};e.n++;e.last=Math.max(e.last,c.start_unix);if(e.details.length<5)e.details.push({d:g.detail,when:c.start_unix});m.set(g.topic,e)}
 const gs=[...m.values()].sort((a,b)=>b.n-a.n||b.last-a.last);if(!gs.length)return[el("div",{class:"empty"},"No unmet requests recorded yet.")];
 return gs.map(e=>el("div",{class:"card"},el("div",{class:"row"},el("div",{class:"when"},e.topic),el("div",{class:"muted"},e.n+(e.n>1?" callers":" caller")+" \u00b7 last "+fmtDay.format(new Date(e.last*1000)))),el("details",{},el("summary",{},"What callers asked"),...e.details.map(x=>el("p",{},fmtWhen.format(new Date(x.when*1000))+": "+x.d)))))}
-function render(){const list=rows();stats(list);$("#out").replaceChildren(...(view==="calls"?renderCalls(list):view==="callers"?renderCallers(list):view==="gaps"?renderGaps(list):renderPlaces(list)))}
+function renderVerify(){const q=$("#q").value.trim().toLowerCase();const vs=VER.filter(v=>!q||[v.business,v.phone,phoneFmt(v.phone),v.summary,v.result].join(" ").toLowerCase().includes(q));if(!vs.length)return[el("div",{class:"empty"},"No verification calls yet.")];
+return vs.map(v=>el("div",{class:"card"},el("div",{class:"row"},el("div",{},el("div",{class:"when"},v.business||"Unlisted number"),el("div",{class:"muted"},[fmtWhen.format(new Date(v.start_unix*1000)),dur(v.duration_secs),v.result].filter(Boolean).join(" \u00b7 "))),el("div",{class:"who"},v.phone?el("a",{href:"tel:"+v.phone},phoneFmt(v.phone)):"")),
+v.summary?el("details",{},el("summary",{},"Summary"),el("p",{},v.summary),el("a",{class:"muted",href:"https://elevenlabs.io/app/agents/history/"+encodeURIComponent(v.conversation_id),target:"_blank",rel:"noopener"},"Open in ElevenLabs \u2197")):null))}
+function render(){const list=rows();stats(list);$("#out").replaceChildren(...(view==="calls"?renderCalls(list):view==="callers"?renderCallers(list):view==="gaps"?renderGaps(list):view==="verify"?renderVerify():renderPlaces(list)))}
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{view=b.dataset.v;document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));render()});
 $("#q").oninput=render;$("#hideMine").onchange=render;
-fetch("/calls/data").then(r=>{if(r.status===401){location.reload();throw 0}return r.json()}).then(d=>{ALL=d.calls;render()}).catch(e=>{if(e)$("#out").replaceChildren(el("div",{class:"empty"},"Couldn't load calls."))});
+fetch("/calls/data").then(r=>{if(r.status===401){location.reload();throw 0}return r.json()}).then(d=>{ALL=d.calls;VER=d.verifications||[];render()}).catch(e=>{if(e)$("#out").replaceChildren(el("div",{class:"empty"},"Couldn't load calls."))});
 </script></body></html>`;

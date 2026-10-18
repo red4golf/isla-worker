@@ -155,6 +155,19 @@ export async function handlePostCall(request, env, ctx) {
       }
     }
     const result = md.phone_call.call_result || md.termination_reason || "";
+    if (env.DB) {
+      try {
+        await env.DB.prepare(
+          "INSERT INTO verify_calls (conversation_id, start_unix, duration_secs, phone, business, result, summary) VALUES (?,?,?,?,?,?,?) " +
+            "ON CONFLICT(conversation_id) DO UPDATE SET duration_secs=excluded.duration_secs, result=excluded.result, summary=excluded.summary"
+        )
+          .bind(evt.data.conversation_id, md.start_time_unix_secs || Math.floor(Date.now() / 1000), md.call_duration_secs ?? null,
+            phone || null, name || null, result || null, evt.data.analysis?.transcript_summary || null)
+          .run();
+      } catch (err) {
+        console.error("verify_calls write failed", err);
+      }
+    }
     ctx?.waitUntil?.(postSlack(env,
       `☎️ *Isla verification call* to ${name || "unlisted number"} / ${phone}\n` +
       `• *Result:* ${result}\n\n*Summary:*\n${evt.data.analysis?.transcript_summary ?? ""}\n\nConversation ID: ${evt.data.conversation_id ?? ""}`));

@@ -129,6 +129,9 @@ test("outbound verification call is tagged for 14 days and kept out of the calle
   assert.equal(tag.kind, "verify");
   assert.ok(tag.expires_unix - tag.created_unix === 14 * 24 * 3600);
   assert.equal(DB.raw.prepare("SELECT COUNT(*) n FROM calls").get().n, 0);
+  const v = DB.raw.prepare("SELECT * FROM verify_calls").get();
+  assert.equal(v.business, "Commuter Comforts");
+  assert.equal(v.result, "voicemail");
 });
 
 test("GET /lookup classifies callers and needs the key", async () => {
