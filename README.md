@@ -49,3 +49,18 @@ npm install
 npm test
 npx wrangler dev   # needs .dev.vars with the secrets above
 ```
+
+
+## Business callers and verification callbacks (2026-10-17)
+
+- `GET /lookup?caller=+1...` (x-isla-key) backs Isla's **Caller_Lookup** tool (tool_3701m568d81yfhv89sj2wzn192q0), attached to the main
+  conversation step only. Isla calls it the first time a caller raises their own business, "our listing", or "I got a call from this number".
+  It returns `caller_type` = `general` | `business` (number is a published number in places.json) | `verify_callback`
+  (Isla called this number to check hours in the last 14 days), plus `caller_business`. Tool assignments copy both into Isla's dynamic variables.
+- Isla's outbound verification agent ("TEST - Isla Outbound Interview (AWT)") now sends its post-call webhook to `/postcall`; outbound calls
+  are written to `caller_tags` (kind `verify`, 14 days) and reported to Slack, and never enter the caller log.
+- Business updates are captured in the `listing_update` data-collection field, stored in `calls.listing_update`, flagged in Slack and on the
+  /calls dashboard. **They are never applied automatically** - caller ID can be spoofed; a person or the daily review confirms first.
+- `POST /initiate` (ElevenLabs conversation-initiation webhook) is built but **disabled**: with it switched on, a test call never started even
+  though /initiate answered correctly in 113 ms. Do not re-enable it on the live line without testing on a spare number.
+- Manual tags: `INSERT INTO caller_tags VALUES ('<10 digits>','<name>','business'|'verify'|'fail_test', strftime('%s','now'), strftime('%s','now')+3600)`.
