@@ -3,12 +3,14 @@
 //   GET  /ferry     <- ElevenLabs tools WSDOT_Ferry_Seattle_to_BI / WSDOT_Ferry_BI_to_Seattle
 //   POST /sms       <- ElevenLabs tool BI_Info_Send_Text
 //   POST /postcall  <- ElevenLabs post-call webhook (signed)
+//   POST /initiate  <- ElevenLabs call-start lookup (x-isla-key); always answers, see initiate.js
 // /ferry and /sms require the header  x-isla-key: <ISLA_TOOL_KEY>  (set on the ElevenLabs tools).
 
 import { handleFerry } from "./ferry.js";
 import { handleSms } from "./sms.js";
 import { handlePostCall } from "./postcall.js";
 import { handleCalls } from "./calls.js";
+import { handleInitiate } from "./initiate.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,6 +18,7 @@ export default {
     try {
       if (pathname === "/health") return new Response("ok");
       if (pathname === "/postcall" && request.method === "POST") return handlePostCall(request, env, ctx);
+      if (pathname === "/initiate" && request.method === "POST") return handleInitiate(request, env);
       if (pathname === "/calls" || pathname.startsWith("/calls/")) return handleCalls(request, env, ctx);
 
       if (pathname === "/ferry" || pathname === "/sms") {

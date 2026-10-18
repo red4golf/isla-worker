@@ -3,6 +3,7 @@
 // Saves the call to the D1 call log (env.DB) and, if SLACK_WEBHOOK_URL is set, posts a Slack report.
 
 import { postSlack } from "./sms.js";
+import { tagVerificationCall, businessForPhone } from "./initiate.js";
 
 const TOLERANCE_SECS = 30 * 60;
 
@@ -56,11 +57,16 @@ export function buildReport(evt) {
     `• *Time:* ${start} Pacific (${mins} min)\n` +
     `• *Locations of interest:* ${dc.locations_of_interest?.value ?? ""}\n` +
     (clean(dc.unmet_requests?.value) ? `• *Couldn't help with:* ${dc.unmet_requests.value}\n` : "") +
+    (callerType(d) !== "general" ? `• *Caller matched as:* ${callerType(d)} (${dv(d).caller_business ?? ""})\n` : "") +
+    (clean(dc.listing_update?.value) ? `• :pencil: *Listing update to review (not applied):* ${dc.listing_update.value}\n` : "") +
     `\n` +
     `*Summary:*\n${d.analysis?.transcript_summary ?? ""}\n\n` +
     `Conversation ID: ${d.conversation_id ?? ""}`
   );
 }
+
+const dv = (d) => d.conversation_initiation_client_data?.dynamic_variables || {};
+const callerType = (d) => dv(d).caller_type || "general";
 
 // "not provided" / "none" / "" -> null
 export function clean(v) {
@@ -105,12 +111,15 @@ export function callRow(evt) {
     text_ok: textOk,
     unmet_requests: clean(dc.unmet_requests?.value),
     unmet_topics: clean(dc.unmet_request_topics?.value),
+    caller_type: callerType(d),
+    listing_update: clean(dc.listing_update?.value),
   };
 }
 
 export const CALL_COLS = [
   "conversation_id", "start_unix", "duration_secs", "phone", "source", "name", "email",
   "locations", "title", "summary", "text_places", "text_ok", "unmet_requests", "unmet_topics",
+  "caller_type", "listing_update",
 ];
 
 export function upsertCall(db, row) {
@@ -132,6 +141,25 @@ export async function handlePostCall(request, env, ctx) {
     return new Response("bad json", { status: 400 });
   }
   if (evt.type !== "post_call_transcription") return new Response("ignored", { status: 200 });
+  // Isla's outbound hours-verification calls: remember the number (14 days) so a callback
+  // gets the right greeting, report to Slack, and keep them out of the caller log.
+  if (evt.data?.metadata?.phone_call?.direction === "outbound") {
+    const md = evt.data.metadata;
+    const phone = md.phone_call.external_number;
+    const name = businessForPhone(phone);
+    if (env.DB) {
+      try {
+        await tagVerificationCall(env.DB, phone, name)?.run();
+      } catch (err) {
+        console.error("verification tag failed", err);
+      }
+    }
+    const result = md.phone_call.call_result || md.termination_reason || "";
+    ctx?.waitUntil?.(postSlack(env,
+      `☎️ *Isla verification call* to ${name || "unlisted number"} / ${phone}\n` +
+      `• *Result:* ${result}\n\n*Summary:*\n${evt.data.analysis?.transcript_summary ?? ""}\n\nConversation ID: ${evt.data.conversation_id ?? ""}`));
+    return new Response("ok", { status: 200 });
+  }
   const row = callRow(evt);
   if (env.DB && row.conversation_id) {
     try {

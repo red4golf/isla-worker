@@ -144,7 +144,7 @@ export function splitGaps(requests, topics) {
 async function dataJson(env) {
   const owner = await ownerPhone(env);
   const { results } = await env.DB.prepare(
-    "SELECT conversation_id, start_unix, duration_secs, phone, source, name, email, locations, title, summary, text_places, text_ok, unmet_requests, unmet_topics FROM calls ORDER BY start_unix DESC LIMIT 5000"
+    "SELECT conversation_id, start_unix, duration_secs, phone, source, name, email, locations, title, summary, text_places, text_ok, unmet_requests, unmet_topics, caller_type, listing_update FROM calls ORDER BY start_unix DESC LIMIT 5000"
   ).all();
   const calls = results.map((r) => ({ ...r, places: canonicalPlaces(r.locations), gaps: splitGaps(r.unmet_requests, r.unmet_topics), is_owner: !!owner && r.phone === owner }));
   return new Response(JSON.stringify({ calls }), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -158,7 +158,7 @@ function csvCell(v) {
 
 async function exportCsv(env) {
   const { results } = await env.DB.prepare("SELECT * FROM calls ORDER BY start_unix DESC").all();
-  const cols = ["start_pacific", "duration_secs", "phone", "name", "email", "locations", "text_places", "text_ok", "unmet_requests", "unmet_topics", "title", "summary", "conversation_id"];
+  const cols = ["start_pacific", "duration_secs", "phone", "name", "email", "locations", "text_places", "text_ok", "unmet_requests", "unmet_topics", "caller_type", "listing_update", "title", "summary", "conversation_id"];
   const fmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", dateStyle: "short", timeStyle: "short" });
   const lines = [cols.join(",")];
   for (const r of results) {
@@ -226,7 +226,7 @@ function renderCalls(list){const cnt=counts(ALL);if(!list.length)return[el("div"
 return list.map(c=>{const who=el("div",{class:"who"},c.phone?el("a",{href:"tel:"+c.phone},c.name?c.name+" · "+phoneFmt(c.phone):phoneFmt(c.phone)):(c.name||"Web caller"),cnt[c.phone]>1?el("span",{class:"badge"},cnt[c.phone]+" calls"):null);
 const txt=c.text_ok===1?el("div",{class:"txt ok"},"✓ Texted: "+(c.text_places||"details")):c.text_ok===0?el("div",{class:"txt bad"},"✗ Text failed"+(c.text_places?": "+c.text_places:"")):null;
 return el("div",{class:"card"},el("div",{class:"row"},el("div",{},el("div",{class:"when"},fmtWhen.format(new Date(c.start_unix*1000))),el("div",{class:"muted"},[dur(c.duration_secs),c.title].filter(Boolean).join(" · "))),who),
-c.places.length?el("div",{class:"chips"},...c.places.map(p=>el("span",{class:"chip"},p))):null,txt,c.gaps.length?el("div",{class:"txt bad"},"Couldn\u2019t help with: "+c.gaps.map(g=>g.detail).join("; ")):null,
+c.places.length?el("div",{class:"chips"},...c.places.map(p=>el("span",{class:"chip"},p))):null,txt,c.gaps.length?el("div",{class:"txt bad"},"Couldn\u2019t help with: "+c.gaps.map(g=>g.detail).join("; ")):null,c.caller_type&&c.caller_type!=="general"?el("div",{class:"txt"},"Matched as: "+c.caller_type):null,c.listing_update?el("div",{class:"txt bad"},"Listing update to review (not applied): "+c.listing_update):null,
 c.summary?el("details",{},el("summary",{},"Summary"),el("p",{},c.summary),el("a",{class:"muted",href:"https://elevenlabs.io/app/agents/history/"+encodeURIComponent(c.conversation_id),target:"_blank",rel:"noopener"},"Open in ElevenLabs ↗")):null)})}
 function renderCallers(list){const m=new Map();for(const c of list){if(!c.phone)continue;const g=m.get(c.phone)||{phone:c.phone,name:null,n:0,last:0,places:new Set()};g.n++;g.name=g.name||c.name;g.last=Math.max(g.last,c.start_unix);c.places.forEach(p=>g.places.add(p));m.set(c.phone,g)}
 const gs=[...m.values()].sort((a,b)=>b.n-a.n||b.last-a.last);if(!gs.length)return[el("div",{class:"empty"},"No callers match.")];
