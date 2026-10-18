@@ -92,7 +92,9 @@ export async function classify(env, rawPhone) {
   return { caller_type: "general", caller_business: "none" };
 }
 
-// GET /lookup?caller=+1...  <- Isla's Caller_Lookup tool, called at the start of every call.
+// GET /lookup?caller=+1...  <- Isla's Caller_Lookup tool. Isla calls it only when a caller raises
+// their own business, "our listing", or a call they got from this number - never for ordinary
+// visitor questions (it once fired on "where can I go on the island?", adding ~1.3s).
 // The tool's assignments copy caller_type / caller_business into Isla's dynamic variables.
 // Any failure answers "general", so Isla simply treats the caller as a visitor.
 export async function handleLookup(request, env) {
