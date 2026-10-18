@@ -57,10 +57,13 @@ npx wrangler dev   # needs .dev.vars with the secrets above
   conversation step only. Isla calls it the first time a caller raises their own business, "our listing", or "I got a call from this number".
   It returns `caller_type` = `general` | `business` (number is a published number in places.json) | `verify_callback`
   (Isla called this number to check hours in the last 14 days), plus `caller_business`. Tool assignments copy both into Isla's dynamic variables.
-- Isla's outbound verification agent ("TEST - Isla Outbound Interview (AWT)") now sends its post-call webhook to `/postcall`; outbound calls
+- Isla's outbound verification agent ("Isla - Outbound Verification", agent_1401m3wskr9wfdxarftha8y93fe3; procedure in C:\DEV\Projects\_ops-docs\isla\outbound-verification.md) now sends its post-call webhook to `/postcall`; outbound calls
   are written to `caller_tags` (kind `verify`, 14 days) and reported to Slack, and never enter the caller log.
 - Business updates are captured in the `listing_update` data-collection field, stored in `calls.listing_update`, flagged in Slack and on the
   /calls dashboard. **They are never applied automatically** - caller ID can be spoofed; a person or the daily review confirms first.
 - `POST /initiate` (ElevenLabs conversation-initiation webhook) is built but **disabled**: with it switched on, a test call never started even
   though /initiate answered correctly in 113 ms. Do not re-enable it on the live line without testing on a spare number.
 - Manual tags: `INSERT INTO caller_tags VALUES ('<10 digits>','<name>','business'|'verify'|'fail_test', strftime('%s','now'), strftime('%s','now')+3600)`.
+- Every outbound call is also saved in `verify_calls` and shown on the /calls page's **Verifications** tab.
+- Safe-change checklist and regression test scripts: `C:\DEV\Projects\_ops-docs\isla\changing-isla-safely.md`
+  (test agent "Isla - Test Caller (regression checks)", agent_8001m567q29kfa3bfva03f49f2aw, calls from the AWT line).
