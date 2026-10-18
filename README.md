@@ -66,4 +66,6 @@ npx wrangler dev   # needs .dev.vars with the secrets above
 - Manual tags: `INSERT INTO caller_tags VALUES ('<10 digits>','<name>','business'|'verify'|'fail_test', strftime('%s','now'), strftime('%s','now')+3600)`.
 - Every outbound call is also saved in `verify_calls` and shown on the /calls page's **Verifications** tab.
 - Safe-change checklist and regression test scripts: `C:\DEV\Projects\_ops-docs\isla\changing-isla-safely.md`
+- How calls end (2026-10-18): the goodbye step (N5) speaks its goodbye and then calls its own `end_call` tool. There is deliberately NO automatic "goodbye spoken" edge from N5 to the end node - that edge was judged on entry, before Isla spoke, so callers got a silent hang-up. Don't add it back. (Text step N4 still ends via its edge after the send.)
+- Caller_Lookup runs only when a caller raises their own business, "our listing/hours", or a call from this number - never on ordinary visitor questions. Its tool description must agree with the N2 BUSINESS CALLERS rule.
   (test agent "Isla - Test Caller (regression checks)", agent_8001m567q29kfa3bfva03f49f2aw, calls from the AWT line).
