@@ -130,3 +130,18 @@ test("outbound verification call is tagged for 14 days and kept out of the calle
   assert.ok(tag.expires_unix - tag.created_unix === 14 * 24 * 3600);
   assert.equal(DB.raw.prepare("SELECT COUNT(*) n FROM calls").get().n, 0);
 });
+
+test("GET /lookup classifies callers and needs the key", async () => {
+  const DB = fakeD1();
+  const get = (caller, key = KEY) => worker.fetch(new Request("https://w/lookup?caller=" + encodeURIComponent(caller), { headers: { "x-isla-key": key } }), { ISLA_TOOL_KEY: KEY, DB }, ctx);
+  let j = await (await get("+12068428008")).json();
+  assert.equal(j.caller_type, "business");
+  assert.equal(j.caller_business, "Commuter Comforts");
+  j = await (await get("+12065550199")).json();
+  assert.equal(j.caller_type, "general");
+  assert.equal((await get("+12068428008", "bad")).status, 401);
+  const now = Math.floor(Date.now() / 1000);
+  DB.raw.prepare("INSERT INTO caller_tags VALUES ('2068428008','Commuter Comforts','verify',?,?)").run(now, now + 100);
+  j = await (await get("+12068428008")).json();
+  assert.equal(j.caller_type, "verify_callback");
+});

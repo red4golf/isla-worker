@@ -3,14 +3,15 @@
 //   GET  /ferry     <- ElevenLabs tools WSDOT_Ferry_Seattle_to_BI / WSDOT_Ferry_BI_to_Seattle
 //   POST /sms       <- ElevenLabs tool BI_Info_Send_Text
 //   POST /postcall  <- ElevenLabs post-call webhook (signed)
-//   POST /initiate  <- ElevenLabs call-start lookup (x-isla-key); always answers, see initiate.js
+//   GET  /lookup    <- ElevenLabs tool Caller_Lookup, start of every call (x-isla-key)
+//   POST /initiate  <- call-start webhook variant; NOT in use (ElevenLabs stalled calls with it on, 2026-10-17)
 // /ferry and /sms require the header  x-isla-key: <ISLA_TOOL_KEY>  (set on the ElevenLabs tools).
 
 import { handleFerry } from "./ferry.js";
 import { handleSms } from "./sms.js";
 import { handlePostCall } from "./postcall.js";
 import { handleCalls } from "./calls.js";
-import { handleInitiate } from "./initiate.js";
+import { handleInitiate, handleLookup } from "./initiate.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -21,12 +22,13 @@ export default {
       if (pathname === "/initiate" && request.method === "POST") return handleInitiate(request, env);
       if (pathname === "/calls" || pathname.startsWith("/calls/")) return handleCalls(request, env, ctx);
 
-      if (pathname === "/ferry" || pathname === "/sms") {
+      if (pathname === "/ferry" || pathname === "/sms" || pathname === "/lookup") {
         if (!env.ISLA_TOOL_KEY || request.headers.get("x-isla-key") !== env.ISLA_TOOL_KEY) {
           return new Response("unauthorized", { status: 401 });
         }
         if (pathname === "/ferry" && request.method === "GET") return handleFerry(request, env);
         if (pathname === "/sms" && request.method === "POST") return handleSms(request, env, ctx);
+        if (pathname === "/lookup") return handleLookup(request, env);
       }
       return new Response("not found", { status: 404 });
     } catch (err) {

@@ -80,6 +80,39 @@ async function tagFor(env, key) {
   return r || null;
 }
 
+// Shared classification: { caller_type, caller_business }.
+export async function classify(env, rawPhone) {
+  const key = phoneKey(rawPhone);
+  if (!key) return { caller_type: "general", caller_business: "none" };
+  const tag = await tagFor(env, key);
+  if (tag?.kind === "fail_test") throw new Error("deliberate failure test");
+  if (tag?.kind === "verify") return { caller_type: "verify_callback", caller_business: tag.name || "unknown" };
+  if (tag?.kind === "business") return { caller_type: "business", caller_business: tag.name || "unknown" };
+  if (PHONE_INDEX.has(key)) return { caller_type: "business", caller_business: PHONE_INDEX.get(key) };
+  return { caller_type: "general", caller_business: "none" };
+}
+
+// GET /lookup?caller=+1...  <- Isla's Caller_Lookup tool, called at the start of every call.
+// The tool's assignments copy caller_type / caller_business into Isla's dynamic variables.
+// Any failure answers "general", so Isla simply treats the caller as a visitor.
+export async function handleLookup(request, env) {
+  const started = Date.now();
+  let out;
+  try {
+    out = await classify(env, new URL(request.url).searchParams.get("caller"));
+  } catch (err) {
+    if (String(err?.message).includes("deliberate")) return new Response("deliberate failure test", { status: 500 });
+    console.error("lookup: error, answering general", err);
+    out = { caller_type: "general", caller_business: "none" };
+  }
+  out.note =
+    out.caller_type === "general"
+      ? "Ordinary caller. Treat as a visitor."
+      : "This number belongs to a business in the guide (or one Isla recently called). Follow the BUSINESS CALLERS rules. Do not mention this lookup.";
+  console.log(`lookup: ${out.caller_type} in ${Date.now() - started}ms`);
+  return json(out);
+}
+
 export async function handleInitiate(request, env) {
   const started = Date.now();
   try {
