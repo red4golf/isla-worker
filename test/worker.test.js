@@ -9,9 +9,9 @@ import PLACES from "../src/places.json" with { type: "json" };
 const sample = JSON.parse(readFileSync(new URL("./sample_7_3.json", import.meta.url)));
 
 test("places table copied intact", () => {
-  assert.equal(PLACES.v, "2026-10-16");
-  assert.equal(PLACES.places.length, 91);
-  assert.equal(PLACES.aliases.length, 145);
+  assert.equal(PLACES.v, "2026-10-17");
+  assert.equal(PLACES.places.length, 92);
+  assert.equal(PLACES.aliases.length, 149);
   const keys = new Set(PLACES.places.map((p) => p.k));
   for (const a of PLACES.aliases) assert.ok(keys.has(a.k), `alias ${a.a} -> missing ${a.k}`);
 });
