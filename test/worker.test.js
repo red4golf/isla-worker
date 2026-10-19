@@ -10,8 +10,8 @@ const sample = JSON.parse(readFileSync(new URL("./sample_7_3.json", import.meta.
 
 test("places table copied intact", () => {
   assert.equal(PLACES.v, "2026-10-18");
-  assert.equal(PLACES.places.length, 93);
-  assert.equal(PLACES.aliases.length, 155);
+  assert.equal(PLACES.places.length, 94);
+  assert.equal(PLACES.aliases.length, 162);
   const keys = new Set(PLACES.places.map((p) => p.k));
   for (const a of PLACES.aliases) assert.ok(keys.has(a.k), `alias ${a.a} -> missing ${a.k}`);
 });
@@ -101,4 +101,12 @@ test("GRUM grooming salon resolves by its spoken names", async () => {
     const p = lookupPlace(n);
     assert.ok(p && p.p === "(206) 842-3599", `no match for ${n}`);
   }
+});
+
+test("Mora now resolves to Island Cool", async () => {
+  const { lookupPlace } = await import("../src/sms.js");
+  for (const n of ["Mora", "Mora Iced Creamery", "Island Cool", "Island Cool Ice Cream"]) {
+    assert.equal(lookupPlace(n)?.p, "(206) 866-9660", `no match for ${n}`);
+  }
+  assert.equal(lookupPlace("Island Cool Frozen Yogurt")?.p, "(206) 201-3734");
 });
