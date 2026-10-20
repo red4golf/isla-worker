@@ -9,9 +9,9 @@ import PLACES from "../src/places.json" with { type: "json" };
 const sample = JSON.parse(readFileSync(new URL("./sample_7_3.json", import.meta.url)));
 
 test("places table copied intact", () => {
-  assert.equal(PLACES.v, "2026-10-18");
+  assert.equal(PLACES.v, "2026-10-20");
   assert.equal(PLACES.places.length, 94);
-  assert.equal(PLACES.aliases.length, 162);
+  assert.equal(PLACES.aliases.length, 165);
   const keys = new Set(PLACES.places.map((p) => p.k));
   for (const a of PLACES.aliases) assert.ok(keys.has(a.k), `alias ${a.a} -> missing ${a.k}`);
 });
@@ -97,7 +97,7 @@ test("postcall: report text", () => {
 
 test("GRUM grooming salon resolves by its spoken names", async () => {
   const { lookupPlace } = await import("../src/sms.js");
-  for (const n of ["GRŪM", "Grum", "Grum Pet Spa", "GRŪM (Grum Pet Spa)"]) {
+  for (const n of ["GRŪM", "Grum", "Grum Pet Spa", "GRŪM (Grum Pet Spa)", "Fluffy Ruff", "Fluffy Ruff Dog Spa", "GRŪM (Grum Pet Spa, formerly Fluffy Ruff)"]) {
     const p = lookupPlace(n);
     assert.ok(p && p.p === "(206) 842-3599", `no match for ${n}`);
   }
