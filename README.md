@@ -69,3 +69,17 @@ npx wrangler dev   # needs .dev.vars with the secrets above
 - How calls end (2026-10-18): the goodbye step (N5) speaks its goodbye and then calls its own `end_call` tool. There is deliberately NO automatic "goodbye spoken" edge from N5 to the end node - that edge was judged on entry, before Isla spoke, so callers got a silent hang-up. Don't add it back. (Text step N4 still ends via its edge after the send.)
 - Caller_Lookup runs only when a caller raises their own business, "our listing/hours", or a call from this number - never on ordinary visitor questions. Its tool description must agree with the N2 BUSINESS CALLERS rule.
   (test agent "Isla - Test Caller (regression checks)", agent_8001m567q29kfa3bfva03f49f2aw, calls from the AWT line).
+
+## Neighbor Line texts (2026-10-24)
+
+`POST /nl/sms?caller_id=+1...` (x-isla-key) backs the Neighbor Line agent's **NL_Send_Text** tool. It mirrors `/sms` but lives in its
+own module (`src/nl_sms.js`) so it can never change Isla's texts.
+
+- Body: `{ "businesses": "Name One, Name Two", "caller_name": "..." }`. Names are matched against `src/nl_vendors.json`
+  (built from the NL vendor directory, `C:\DEV\Projects\BIConcierge\neighbor-line-kb.json`). Unknown names are dropped and never texted;
+  at most two businesses per text.
+- **Off until** the Cloudflare variable `NL_FROM_NUMBER` is set to Neighbor Line's own Twilio number. Until then it answers
+  `failed` and tells the agent to read the number aloud.
+- Optional secret `NL_SLACK_WEBHOOK_URL` for text reports (never Isla's channel). Twilio credentials are shared with Isla.
+- Logs to D1 table `nl_texts` (in `schema.sql`; run that `CREATE TABLE` once in the D1 console before turning texting on).
+- Updating businesses: edit the directory, rebuild `nl_vendors.json`, `npm test`, push.

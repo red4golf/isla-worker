@@ -64,3 +64,14 @@ CREATE TABLE IF NOT EXISTS verify_calls (
   result TEXT,             -- e.g. voicemail, human, no-answer (ElevenLabs call_result / termination reason)
   summary TEXT
 );
+
+-- Neighbor Line caller texts (see src/nl_sms.js). Added 2026-10-24.
+CREATE TABLE IF NOT EXISTS nl_texts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sent_unix INTEGER NOT NULL,
+  phone TEXT,
+  vendors TEXT,            -- comma-separated vendor ids from nl_vendors.json
+  ok INTEGER,
+  detail TEXT
+);
+CREATE INDEX IF NOT EXISTS nl_texts_phone ON nl_texts(phone, sent_unix);
